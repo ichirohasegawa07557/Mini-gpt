@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+.pytest_cache/
+# Keep small demo results and checkpoints in GitHub by default.
+# For large experiments, uncomment:
+# checkpoints/
+# results/*.pt

@@ -1,0 +1,12 @@
+To be, or not to be, that is the question:
+Whether it is nobler in the mind to suffer
+The slings and arrows of outrageous fortune,
+Or to take arms against a sea of troubles.
+
+The robot learned a small language model from symbols.
+It watched characters, guessed the next one, and improved.
+Attention looked backward through the sequence.
+Generation began with a tiny prompt and continued step by step.
+
+In a small laboratory, data becomes pattern.
+Pattern becomes prediction, and prediction becomes text.

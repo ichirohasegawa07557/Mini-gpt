@@ -1,0 +1,7 @@
+{
+  "vocab_size": 36,
+  "parameter_count": 5012,
+  "max_iters": 1,
+  "block_size": 32,
+  "device": "cpu"
+}
