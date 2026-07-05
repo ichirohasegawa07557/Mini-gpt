@@ -1,148 +1,78 @@
-# Mini GPT From Scratch
+# Mini GPT in Pure C
 
-A compact, educational GPT-style Transformer implemented from scratch in PyTorch.
+[ichirohasegawa07557/mini-gpt-](https://github.com/ichirohasegawa07557/mini-gpt-)(PyTorch実装)を、**外部ライブラリなしの純C(C99 + libmのみ)** に移植したものです。順伝播だけでなく、逆伝播(自動微分なしの手書きバックプロパゲーション)・AdamW・生成・可視化まですべてCで実装しています。
 
-The project trains a character-level language model on a tiny local corpus, generates text, visualizes the training curve, and saves an attention map. It is intentionally small enough to run on a laptop CPU.
+## ディレクトリ構造
 
-## Implemented Features
-
-- Character-level tokenizer
-- Causal self-attention
-- Transformer block with residual connections and layer normalization
-- Mini GPT model with token and positional embeddings
-- Training loop with AdamW
-- Text generation with temperature and top-k sampling
-- Checkpoint save/load
-- Training curve visualization
-- Attention map visualization
-- Streamlit viewer
-- Pytest tests
-
-## Project Structure
-
-```text
-mini-gpt-from-scratch/
+```
+mini-gpt-c/
+├── Makefile
 ├── README.md
-├── requirements.txt
-├── requirements-minimal.txt
-├── app.py
 ├── data/
-│   └── tiny_corpus.txt
+│   └── tiny_corpus.txt          # 元リポジトリと同一のコーパス (504文字, 語彙36)
+├── include/minigpt/             # 1コンポーネント = 1ヘッダ(構造がそのまま見える)
+│   ├── config.h                 #   GPTConfig / TrainConfig
+│   ├── rng.h                    #   xorshift64* + Box-Muller (rand()不使用)
+│   ├── tokenizer.h              #   文字レベルトークナイザ
+│   ├── model.h                  #   MiniGPT本体(順伝播+逆伝播)
+│   ├── train.h                  #   AdamW / 勾配クリップ / 学習ループ
+│   ├── generate.h               #   temperature + top-k サンプリング
+│   └── viz.h                    #   SVG出力(matplotlib代替)
 ├── src/
-│   ├── data.py
-│   ├── model.py
-│   ├── train.py
-│   └── visualize.py
-├── scripts/
-│   ├── train_mini_gpt.py
-│   ├── generate_text.py
-│   ├── plot_attention_demo.py
-│   └── run_all.py
-├── results/
-└── tests/
+│   ├── rng.c  tokenizer.c  model.c  train.c  generate.c  viz.c
+│   └── main.c                   # CLI: structure / train / generate / attention / all
+├── tests/
+│   └── test_minigpt.c           # 勾配の数値検証を含む8テスト
+└── results/                     # 生成物(git管理外)
 ```
 
-## Setup
+## モデル構造
+
+```
+tokens ──> token_emb + pos_emb ──> [Block × n_layer] ──> LN_f ──> head ──> logits
+                                      │
+              Block:  x ── LN1 ── CausalSelfAttention ──(+)── LN2 ── MLP(4x, GELU) ──(+)──> x'
+                      └──────────────residual──────────┘ └──────────residual────────┘
+```
+
+`./bin/minigpt structure` で各層の形状とパラメータ数のツリーを表示します(既定構成: 2層・2ヘッド・幅64・語彙36で **108,836 パラメータ**)。
+
+## ビルドと実行
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+make all          # bin/minigpt と bin/tests をビルド(依存: ccとlibmのみ)
+make test         # 8テスト実行(勾配検証を含む)
+./bin/minigpt all # 学習(200 iter) → 構造表示 → 生成 → アテンション可視化
 ```
 
-For a lighter install without Streamlit:
+個別コマンド:
 
 ```bash
-pip install -r requirements-minimal.txt
+./bin/minigpt structure
+./bin/minigpt train 200
+./bin/minigpt generate "The " 200
+./bin/minigpt attention "To be, or not to be"
 ```
 
-## Run Tests
+生成物: `results/mini_gpt_checkpoint.bin`, `training_history.csv`, `training_curve.svg`, `generated_text.txt`, `attention_map.svg`, `model_structure.txt`
 
-```bash
-python -m pytest -q
-```
+## 正しさの担保
 
-Expected result:
+手書き逆伝播は誤りやすいため、テストで**中心差分による数値微分と解析勾配を60個のランダムパラメータで比較**しています(最大相対誤差 ~3e-06)。全計算はdouble精度です。ほかに、トークナイザの往復、初期損失 ≈ ln(vocab)、アテンションの因果性(未来を見ない・行和=1)、AdamWによる損失低下、生成長の検証を行います。
 
-```text
-4 passed
-```
+## 元実装からの訂正点
 
-## Run All
+1. **学習ループのoff-by-one**: 元の `for step in range(max_iters+1)` は max_iters+1 回更新し、履歴の最終行が最後の更新**前**の損失を記録していました。本実装は正確に max_iters 回更新し、更新**後**に記録します。
+2. **検証データの無言フォールバック**: 付属コーパス(504文字)では検証分割(約50文字)が block_size+1=65 未満のため、元実装は val_loss を訓練データで計算しながらその旨を表示しませんでした。本実装は同じフォールバックを行いつつ `(val=train)` と明示します。
+3. **READMEの構成図の不一致**: 元READMEのツリーはリポジトリに存在する `notebooks/` を含まず、ルート名も実際のリポジトリ名と異なっていました。本READMEは実体と一致させています。
 
-```bash
-python scripts/run_all.py
-```
+## PyTorch版との意図的な差異
 
-This creates:
+- **dropout**: 元実装の0.1に対し本実装は使用しません(小コーパスの教育実装では決定的な挙動を優先。勾配検証も厳密になります)。
+- **GELU**: PyTorchの既定(erf)ではなくtanh近似(GPT-2と同じ)。
+- **checkpoint**: `.pt` の代わりに自前バイナリ形式 `.bin`(magic + config + 語彙 + パラメータ)。
+- **可視化**: matplotlib/Streamlitの代わりに自前SVG出力。
 
-```text
-results/mini_gpt_checkpoint.pt
-results/training_history.csv
-results/training_curve.png
-results/generated_text.txt
-results/attention_map.png
-```
+## 制限
 
-## Individual Commands
-
-Train:
-
-```bash
-python scripts/train_mini_gpt.py --max-iters 20
-```
-
-Generate text:
-
-```bash
-python scripts/generate_text.py --prompt "The " --max-new-tokens 200
-```
-
-Plot attention:
-
-```bash
-python scripts/plot_attention_demo.py
-```
-
-Streamlit viewer:
-
-```bash
-streamlit run app.py
-```
-
-## Results
-
-### Training curve
-
-![Training Curve](results/training_curve.png)
-
-### Attention map
-
-![Attention Map](results/attention_map.png)
-
-Generated text is saved at:
-
-```text
-results/generated_text.txt
-```
-
-## What This Demonstrates
-
-This repository demonstrates the core components of a GPT-like language model:
-
-1. Convert text into token IDs
-2. Train a Transformer to predict the next token
-3. Use causal attention so each position can only attend to previous positions
-4. Generate text autoregressively one token at a time
-
-## Limitations
-
-- This is an educational implementation, not a production LLM.
-- It uses a tiny character-level dataset.
-- It is designed for local CPU-friendly experiments.
-- The generated text is not expected to be high quality without larger data and longer training.
-
-## Implemented Extensions
-
-The repository already includes checkpointing, generation, attention visualization, a Streamlit viewer, tests, and reusable scripts. Additional scaling work such as larger corpora or GPU training can be done by changing command-line parameters.
+元実装と同じく教育目的です。文字レベル・極小コーパスのため、生成文はコーパス風の綴りを再現する程度の品質です。

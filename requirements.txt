@@ -1,7 +1,0 @@
-torch
-numpy
-pandas
-matplotlib
-tqdm
-streamlit
-pytest
