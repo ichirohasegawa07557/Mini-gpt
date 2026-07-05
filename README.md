@@ -1,6 +1,6 @@
 # Mini GPT in Pure C
 
-[ichirohasegawa07557/mini-gpt-](https://github.com/ichirohasegawa07557/mini-gpt-)(PyTorch実装)を、**外部ライブラリなしの純C(C99 + libmのみ)** に移植したものです。順伝播だけでなく、逆伝播(自動微分なしの手書きバックプロパゲーション)・AdamW・生成・可視化まですべてCで実装しています。
+順伝播だけでなく、逆伝播(自動微分なしの手書きバックプロパゲーション)・AdamW・生成・可視化までCで実装しています。
 
 ## ディレクトリ構造
 
